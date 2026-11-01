@@ -15,7 +15,7 @@ Your map of the lab: what to do, in what order, where files live, and what to su
 | Exercises | 13 in the Master notebook; 3 in the AgentPipeline notebook. |
 | Grading | Part 1: 40 points; Part 2: 30 points; Part 3: 30 points |
 | Competition | [Data Mining Class Kaggle Competition](https://www.kaggle.com/t/d99def2e62194b0d8f633267c32e6d1e). |
-| Submission route | Push your work to your repository, then submit its link and a backup ZIP on NTU COOL. See [What to submit](#what-to-submit-and-how-it-is-graded). |
+| Submission route | Push your notebooks to your repository, then submit its link and a ZIP on NTU COOL. Your session logs are git-ignored and reach us only in that ZIP. See [What to submit](#what-to-submit-and-how-it-is-graded). |
 
 ## The order to work in
 
@@ -32,7 +32,7 @@ flowchart LR
 1. Run `DM2026-Lab2-Master.ipynb` from the top. Answer Exercises 1–13 in the notebook. Section 8 runs retrieval and RAG; Section 9 saves the fitted pipeline.
 2. Open `DM2026-Lab2-AgentPipeline.ipynb` after Section 9 has created `lab2_workspace/manifest.json`. Use the agent to run controlled experiments and answer Exercises 14–16, citing its `result_id`s.
 3. Complete the competition code in `DM2026-Lab2-Homework.ipynb` and submit your prediction to Kaggle by **November 22**. Capture your private-leaderboard ranking, then finish the Markdown report in the same notebook.
-4. By **November 25 at 11:59 pm**, check the notebooks and both encrypted logs, push the work to your repository, and submit the repository link and backup ZIP on NTU COOL.
+4. By **November 25 at 11:59 pm**, check the notebooks and both encrypted logs, push the notebooks to your repository, and submit the repository link and the ZIP on NTU COOL. The ZIP is the only place your session logs go: `.gitignore` keeps them out of your repository.
 
 ## The notebooks
 
@@ -55,6 +55,15 @@ uv run jupyter lab   # starts JupyterLab using that environment
 
 `uv sync` reads `pyproject.toml` and `uv.lock`, so every student ends up with identical versions. It needs Python 3.11 and about 3 GB of free disk: the environment itself is 1.7 GB, `uv` keeps the files it downloaded in a cache, and the MiniLM model in Section 5 adds 88 MB the first time it runs. That first `uv sync` takes a while; later runs are immediate. Always start the notebooks with `uv run jupyter lab` rather than activating anything by hand, and do not install packages yourself: the chat widget in the AgentPipeline notebook only works with the pinned versions.
 
+**Before you run the Master's Section 8, fill in who you are.** Copy `config/.env.example` to `config/.env` and set `STUDENT_NAME` and `STUDENT_ID` alongside your API key:
+
+```ini
+STUDENT_NAME = "Your Name"
+STUDENT_ID   = "113000000"
+```
+
+Those two go there and nowhere else. `config/.env` is git-ignored, so your student ID stays on your own machine: it is not typed into a notebook, not printed in a cell's output, and not readable in the session logs you push. The notebooks read it from that file and encrypt it into the logs, where a TA reads it with the grading key.
+
 Run the notebooks from this repository's root directory so their relative paths resolve correctly. The supplied SemEval data is already in `data/semeval/`. Run the Master through Section 9 before opening the AgentPipeline: that section creates the workspace the agent needs. The Homework notebook may be run separately for the competition.
 
 ## Where everything is
@@ -71,7 +80,7 @@ These folders and files are supplied with the repository:
 | `agent_pipeline/` | Agent chat interface, backend selection, access control, and encrypted logging code. | The AgentPipeline notebook imports these modules. |
 | `agent_pipeline/keys/` | Public key used to encrypt session logs. | The notebooks use it when writing logs; no private key is included. |
 | `pics/` | Example figures referenced by the notebooks. | The Homework notebook also points to `pics/pic_ranking.png`, which you add for your ranking screenshot. |
-| `config/.env.example` | Template for provider API-key settings. | Follow the separate setup guide to create your local `config/.env`. |
+| `config/.env.example` | Template for your identity (name, student ID) and your provider API-key settings. | Copy it to `config/.env` before the Master's Section 8. |
 | `pyproject.toml`, `uv.lock` | Project dependencies and their locked versions for `uv`. | The separate setup guide uses these to create the environment. |
 | `requirements.txt` | An alternative dependency list. | Use the installation method specified by the separate setup guide. |
 
@@ -80,11 +89,11 @@ The three student notebooks are listed in [The notebooks](#the-notebooks). The f
 | Path | Created by | What goes in it |
 | --- | --- | --- |
 | `.venv/` | Environment setup with `uv`. | The local Python environment and installed packages. |
-| `config/.env` | You, following the setup guide. | Your provider API key; keep this file private. |
+| `config/.env` | You, following the setup guide. | Your name, your student ID, and your provider API key. Git-ignored, and the only place any of the three belongs. |
 | `data/embeddings/` | The Master notebook. | Cached MiniLM feature arrays, including `minilm_train.npy` and `minilm_test.npy`. |
 | `lab2_workspace/` | Master Section 9. | Saved train/test tables, feature matrices, fitted models, results, and `manifest.json` for the AgentPipeline. |
-| `session_logs/lab2_main_session.jsonl.enc` | The Master's RAG section. | Encrypted RAG conversation log. |
-| `session_logs/lab2_agent_pipeline_session.jsonl.enc` | The AgentPipeline chat. | Encrypted agent conversation log. |
+| `session_logs/lab2_main_session.jsonl.enc` | The Master's RAG section. | Encrypted RAG conversation log, with your name and student ID encrypted inside it. |
+| `session_logs/lab2_agent_pipeline_session.jsonl.enc` | The AgentPipeline chat. | Encrypted agent conversation log, with your name and student ID encrypted inside it. |
 | `pics/pic_ranking.png` | You, after the competition. | Screenshot of your private-leaderboard ranking. |
 
 Keep `lab2_workspace/` locally until you finish the AgentPipeline; it is not required in the submission ZIP. The AgentPipeline reads `lab2_workspace/manifest.json` from disk in a fresh kernel. If that file is missing, run the Master through Section 9. See [What to submit](#what-to-submit-and-how-it-is-graded) for the files that belong in the ZIP.
@@ -129,7 +138,7 @@ For submissions with an F1 score below 0.5, the Homework notebook specifies 0–
 
 The competition report is graded separately and is worth 15 points.
 
-The lab is released on **October 26**. The **internal Kaggle competition closes November 22**; submit your predictions before it closes and save a screenshot of your private-leaderboard ranking. The **lab submission is due November 25 at 11:59 pm**, giving you time to finish the Homework report and package your files after the competition. Push your work to your repository, then submit its link and a backup ZIP on NTU COOL.
+The lab is released on **October 26**. The **internal Kaggle competition closes November 22**; submit your predictions before it closes and save a screenshot of your private-leaderboard ranking. The **lab submission is due November 25 at 11:59 pm**, giving you time to finish the Homework report and package your files after the competition. Push your work to your repository, then submit its link and the ZIP on NTU COOL. If you upload the ZIP without the two session logs, you can add them on NTU COOL until **November 26 at 11:59 pm**; everything else is due on November 25.
 
 Put these files in the ZIP, preserving the folder paths:
 
@@ -144,6 +153,8 @@ pics/
   pic_ranking.png
 ```
 
-The three notebooks contain your exercise answers, code, visible results, and competition report. The two logs are the encrypted evidence required by the Master and AgentPipeline notebooks; include them exactly as generated. `pic_ranking.png` is the competition ranking screenshot linked in the Homework notebook. Do not add `config/.env`, `.venv/`, `lab2_workspace/`, or `data/embeddings/` to the ZIP. The supplied SemEval dataset and reference images are not outputs you need to submit. You may name the ZIP with your name and student ID so it can be matched to you; check NTU COOL if a specific filename is announced.
+The three notebooks contain your exercise answers, code, visible results, and competition report. The two logs are the encrypted evidence required by the Master and AgentPipeline notebooks; include them exactly as generated. `pic_ranking.png` is the competition ranking screenshot linked in the Homework notebook. Do not add `config/.env`, `.venv/`, `lab2_workspace/`, or `data/embeddings/` to the ZIP. The supplied SemEval dataset and reference images are not outputs you need to submit. **Name the ZIP with your student ID and your name**, for example `Lab2_113000000_Wang_Mei-Ling.zip`, so it can be matched to you. That upload goes to NTU COOL, where only the teaching staff can see it, not to GitHub. Check NTU COOL if a specific filename is announced.
 
-Before submitting, check that the regular notebooks contain your answers and that both log files exist and have nonzero size. Git tracks `session_logs/`, so both logs are included when you push, and they belong in the backup ZIP as well. `.gitignore` covers `config/.env`, `.venv/`, the Python and Jupyter caches, and the two generated directories `lab2_workspace/` and `data/embeddings/`, so none of those reach a commit by accident; running the Master rebuilds both. Check the files selected for every commit, especially `config/.env`, so no API key is published.
+Before submitting, check that the regular notebooks contain your answers and that both log files exist and have nonzero size. `.gitignore` covers `session_logs/`, `config/.env`, `.venv/`, the Python and Jupyter caches, and the two generated directories `lab2_workspace/` and `data/embeddings/`, so none of them reach a commit by accident; running the Master rebuilds the generated ones. Your logs therefore reach us only through the ZIP: open it before you upload and confirm both `.jsonl.enc` files are inside. Check the files selected for every commit, especially `config/.env`, so no API key is published.
+
+**Your repository is public, including a fork of this one, and GitHub does not let a fork be made private.** Everything you push is readable by anyone, so nothing in this lab asks you to put your name or student ID in a file you push: they live only in the git-ignored `config/.env`, encrypted from there into your session logs, which are git-ignored as well and handed in on NTU COOL. The notebooks you commit identify which notebook produced them, not who you are. If you add your own cells, keep your name and student ID out of them: that is the one place where it is still up to you.

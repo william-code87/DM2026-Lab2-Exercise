@@ -8,12 +8,18 @@ __pycache__/
 PUSH-LOG.md
 config/.env
 
-# Generated locally and not part of the submission: the saved pipeline the
+# Generated locally and not part of what you push: the saved pipeline the
 # AgentPipeline reads (~27 MB) and the cached MiniLM vectors (~6 MB). Both are
 # rebuilt by running the Master, so there is nothing to lose by not committing
-# them. `session_logs/` is deliberately NOT here: the encrypted logs are part
-# of what students hand in, so they have to be pushable.
+# them.
 lab2_workspace/
 data/embeddings/
 DM2026-Lab2-AgentPipeline-Grading-Reference.ipynb
 DM2026-Lab2-Master-Grading-Reference.ipynb
+
+# LAB 2 DEVIATION (2026-11-01): Lab 1 does not ignore `session_logs/`, and in
+# Lab 1 students push their logs to public forks as a result. The logs are
+# handed in on NTU COOL instead, where only the teaching staff can read them,
+# so nothing a student runs can put a session log in a public repository. Keep
+# this entry on any future sync from Lab 1.
+session_logs/

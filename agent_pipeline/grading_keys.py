@@ -65,19 +65,28 @@ def load_private_key(path, passphrase: bytes = None):
         return serialization.load_pem_private_key(f.read(), password=passphrase)
 
 
-def read_student_identity(log_path) -> dict:
+def read_student_identity(log_path, private_key_path=None, passphrase: bytes = None) -> dict:
     """Reads a log's header line(s): student_name, student_id, track
-    (which notebook produced this log -- "agent-dev",
-    "agentic-pipeline", or "homework"), filename (what this file was
-    actually named when it was created), and machine_id (a hashed,
-    non-reversible identifier for the computer that ran this session --
-    see session_logger.py's _machine_id(); for cross-checking that two
-    submissions claiming to be different students didn't come from the
-    same machine, not for identifying the student). Unlike everything
-    else in the log, the header is plain text (see session_logger.py),
-    so this needs no private key -- useful for matching a batch of
-    submissions to students, and to the right notebook, before
-    decrypting any of them for real.
+    (which notebook produced this log -- "lab2-main",
+    "lab2-agent-pipeline"), filename (what this file was actually named
+    when it was created), and machine_id (a hashed identifier for the
+    computer that ran this session -- see session_logger.py's
+    _machine_id() for what it is and, importantly, what it is not).
+
+    **Pass private_key_path to get the identity fields.** As of
+    2026-11-01 name, ID and machine_id are encrypted inside the header
+    rather than readable in it, because Lab 2 students push their logs
+    to public GitHub forks (see the LAB 2 DEVIATION note in
+    session_logger.py). Only `track`, `filename`, `created_at` and
+    `header_count` come back without a key; the identity fields come
+    back None, and `identity_readable` is False to say so rather than
+    leaving a caller to read None as "the student left it blank".
+    `identity_changed` is None in that case for the same reason.
+
+    Logs in the old plain-text format still read correctly with or
+    without a key, so a mixed folder of Lab 1 and Lab 2 submissions
+    needs no special handling: `identity_encrypted` reports which format
+    each file turned out to be.
 
     session_logger.py appends a fresh session_key header every time the
     launch-chat cell runs (a new day, a kernel restart, recovering from
@@ -112,23 +121,48 @@ def read_student_identity(log_path) -> dict:
             "filename": None, "machine_id": None, "machine_ids": [],
             "student_ids_seen": [], "student_names_seen": [],
             "identity_changed": False, "header_count": 0,
+            "identity_encrypted": False, "identity_readable": True,
         }
 
-    latest = headers[-1]
-    machine_ids = sorted({h.get("machine_id") for h in headers if h.get("machine_id")})
-    student_ids_seen = sorted({h.get("student_id") for h in headers if h.get("student_id")})
-    student_names_seen = sorted({h.get("student_name") for h in headers if h.get("student_name")})
+    # One identity block per header, opened where we can. Each header
+    # carries its own wrapped session key, so a file written across
+    # several runs needs one decrypt per header, not one for the file.
+    private_key = load_private_key(private_key_path, passphrase=passphrase) if private_key_path else None
+    resolved = []
+    sealed_count = 0
+    for h in headers:
+        fields = {k: h.get(k) for k in ("student_name", "student_id", "machine_id")}
+        sealed = h.get("identity")
+        if sealed:
+            sealed_count += 1
+            if private_key is not None:
+                session_key = private_key.decrypt(base64.b64decode(h["encrypted_key"]), OAEP_PADDING)
+                plaintext = AESGCM(session_key).decrypt(
+                    base64.b64decode(sealed["nonce"]), base64.b64decode(sealed["ciphertext"]), None
+                )
+                fields.update(json.loads(plaintext))
+        resolved.append(fields)
+
+    latest, latest_fields = headers[-1], resolved[-1]
+    readable = sealed_count == 0 or private_key is not None
+    machine_ids = sorted({r.get("machine_id") for r in resolved if r.get("machine_id")})
+    student_ids_seen = sorted({r.get("student_id") for r in resolved if r.get("student_id")})
+    student_names_seen = sorted({r.get("student_name") for r in resolved if r.get("student_name")})
     return {
-        "student_name": latest.get("student_name"),
-        "student_id": latest.get("student_id"),
+        "student_name": latest_fields.get("student_name"),
+        "student_id": latest_fields.get("student_id"),
         "track": latest.get("track"),
         "filename": latest.get("filename"),
-        "machine_id": latest.get("machine_id"),
+        "machine_id": latest_fields.get("machine_id"),
         "machine_ids": machine_ids,
         "student_ids_seen": student_ids_seen,
         "student_names_seen": student_names_seen,
-        "identity_changed": len(student_ids_seen) > 1 or len(student_names_seen) > 1,
+        "identity_changed": (
+            len(student_ids_seen) > 1 or len(student_names_seen) > 1 if readable else None
+        ),
         "header_count": len(headers),
+        "identity_encrypted": sealed_count > 0,
+        "identity_readable": readable,
     }
 
 

@@ -13,16 +13,25 @@ import ipywidgets as widgets
 from IPython.display import display
 
 from .llm_backends import get_api_keys
+from .student_identity import describe_student_identity, load_student_identity
 
 
 def select_backend(valid_backends=("groq", "gemini")):
-    """Displays a name field, a student ID field, a backend dropdown, a
-    fallback checkbox, and a Confirm button. Returns a plain dict, empty
-    until the student fills in both identifiers, picks a backend, and
-    clicks Confirm, at which point it's filled in with "student_name",
-    "student_id", "backend", and "multi_provider". Run this cell, fill it
-    in, click Confirm, then move on -- the next cell checks for those
-    keys and tells you plainly if you skipped this step.
+    """Displays a backend dropdown, a fallback checkbox, and a Confirm
+    button. Returns a plain dict, empty until the student picks a backend
+    and clicks Confirm, at which point it's filled in with
+    "student_name", "student_id", "backend", and "multi_provider". Run
+    this cell, click Confirm, then move on -- the next cell checks for
+    those keys and tells you plainly if you skipped this step.
+
+    LAB 2 DEVIATION (2026-11-01): the name and student ID text boxes are
+    gone. Whatever a student typed into them was echoed into this cell's
+    output, which they then committed to a public fork, and ipywidgets
+    persists a text box's value into the notebook's own metadata when
+    JupyterLab saves widget state -- so the ID could survive even
+    clearing the outputs. Both values are read from the git-ignored
+    config/.env now (see student_identity.py); the dict keys are
+    unchanged, so the launch cell below needs no edit.
 
     This only checks that a usable key exists; it doesn't read or store
     one. The graph-launch cell builds the actual model itself, straight
@@ -31,13 +40,11 @@ def select_backend(valid_backends=("groq", "gemini")):
     through GOOGLE_API_KEY_10, say) gets turned into a model that
     rotates between all of them. See llm_backends.py.
 
-    Both identifiers go into the session log's header in plain text (see
-    session_logger.py) so a batch of submissions can be matched back to
-    students without depending on how each file happens to be named."""
+    Both identifiers are encrypted into the session log alongside every
+    turn (see session_logger.py), so a submission is matched to a student
+    with the grading key rather than by reading the file."""
     choice = {}
 
-    name_input = widgets.Text(placeholder="Your name, as it should appear on the submission", description="Name:")
-    id_input = widgets.Text(placeholder="Your student ID", description="Student ID:")
     backend_dropdown = widgets.Dropdown(options=valid_backends, description="Backend:")
     fallback_checkbox = widgets.Checkbox(value=False, description="Enable multi-provider fallback")
     confirm_button = widgets.Button(description="Confirm", button_style="primary")
@@ -45,12 +52,12 @@ def select_backend(valid_backends=("groq", "gemini")):
 
     def on_confirm(_=None):
         status_output.clear_output()
-        student_name = name_input.value.strip()
-        student_id = id_input.value.strip()
         backend = backend_dropdown.value
         with status_output:
-            if not student_name or not student_id:
-                print("Error: enter both your name and your student ID before confirming.")
+            try:
+                student_name, student_id = load_student_identity()
+            except ValueError as exc:
+                print(f"Error: {exc}")
                 return
             keys = get_api_keys(backend)
             if not keys:
@@ -63,13 +70,14 @@ def select_backend(valid_backends=("groq", "gemini")):
             choice["student_id"] = student_id
             choice["backend"] = backend
             choice["multi_provider"] = fallback_checkbox.value
-            print(f"Name: {student_name}")
-            print(f"Student ID: {student_id}")
+            # Masked, not echoed: this line is saved into the notebook
+            # as cell output and pushed to a public repository.
+            print(describe_student_identity())
             key_word = "key" if len(keys) == 1 else "keys"
             print(f"Using backend: {backend}. {len(keys)} API {key_word} loaded.")
             print(f"Multi-provider fallback: {'enabled' if fallback_checkbox.value else 'disabled'}.")
             print("Set. Move on to the next cell.")
 
     confirm_button.on_click(on_confirm)
-    display(widgets.VBox([name_input, id_input, backend_dropdown, fallback_checkbox, confirm_button, status_output]))
+    display(widgets.VBox([backend_dropdown, fallback_checkbox, confirm_button, status_output]))
     return choice

@@ -38,9 +38,20 @@ def _machine_id() -> str:
     same computer -- not a raw MAC address (uuid.getnode()), which is
     real hardware-identifying information with no reason to leave a
     student's machine in the clear. Hashed down to 12 hex characters:
-    enough to notice two logs sharing a machine, not enough to reverse
-    into the original address. Same machine always produces the same
-    hash; different machines are extremely unlikely to collide."""
+    enough to notice two logs sharing a machine.
+
+    Two caveats, both measured on 2026-11-01 rather than assumed. First,
+    12 hex characters is 48 bits of SHA-256 over a 48-bit input, so a
+    published hash can be brute-forced back to the address it came from
+    (seconds, given a guess at the vendor prefix) -- which is part of why
+    this value now travels inside the encrypted part of the file instead
+    of the header's plain text. Second, it is NOT reliably stable per
+    machine: six headers written from one laptop carried five different
+    values, because uuid.getnode() falls back to a fresh random node
+    whenever it cannot read a hardware address, which is what happens
+    under the notebooks' own environment. So treat a match between two
+    submissions as a real signal, and a mismatch as no information at
+    all."""
     raw = str(uuid.getnode())
     return hashlib.sha256(raw.encode("ascii")).hexdigest()[:12]
 
@@ -61,34 +72,42 @@ class SessionLogger:
         self._aesgcm = AESGCM(session_key)
         encrypted_session_key = public_key.encrypt(session_key, OAEP_PADDING)
 
-        # student_name, student_id, track, filename, and machine_id are
-        # left in plain text, unlike everything else in this file: none
-        # is grading content, all are things the student already knows
-        # (or the notebook/machine itself decides), and keeping them
-        # readable without the private key lets a batch of submissions
-        # be matched to students, and to the notebook that produced them,
-        # before anyone runs the actual decrypt. All three notebooks now
-        # save into one shared session_logs/ folder, so their files need
-        # genuinely distinct names to avoid colliding
-        # (agent_dev_session.jsonl.enc, agent_pipeline_session.jsonl.enc,
-        # homework_session.jsonl.enc); `filename` records what this file
-        # was actually named at the moment it was created, so a rename or
-        # a flattened-into-one-zip upload doesn't lose that, the same
-        # reasoning `track` already covers for which notebook produced
-        # it. `machine_id` is a hashed, non-reversible identifier for the
-        # computer that ran this session (see _machine_id() above) --
-        # meant for a TA to cross-check that two submissions claiming to
-        # be different students didn't actually come from the same
-        # machine, not for identifying the student themselves.
+        # LAB 2 DEVIATION (2026-11-01): who the student is no longer
+        # appears in this header in plain text. It used to -- name, ID and
+        # machine_id sat here readable, so a batch of submissions could be
+        # matched to students before anyone ran a decrypt -- and in Lab 1
+        # that was harmless, because nothing asked students to publish the
+        # file. Lab 2 does: session_logs/ is deliberately tracked by git,
+        # since the encrypted logs ARE the submission, and students work in
+        # public forks of a public repository. The result was a real name
+        # and a real nine-digit student ID published on the open internet,
+        # permanently, for every student who handed in. So the three
+        # identifying fields are sealed with this session's own AES key
+        # alongside every turn, and read back by read_student_identity()
+        # in grading_keys.py, which takes the private key and returns the
+        # same fields it always did.
+        #
+        # What stays readable is deliberately non-identifying: `track`
+        # (which notebook wrote this log), `filename` (what the file was
+        # called when it was created, so a rename or a flattened ZIP
+        # upload cannot lose that -- all three notebooks share one
+        # session_logs/ folder), and `created_at`. That is enough to sort
+        # a folder of submissions by notebook and to spot an empty or
+        # truncated file without a key, which is all the plain text was
+        # ever used for on our side.
         header = {
             "type": "session_key",
-            "student_name": student_name,
-            "student_id": student_id,
             "track": track,
             "filename": self.log_path.name,
-            "machine_id": self.machine_id,
             "encrypted_key": base64.b64encode(encrypted_session_key).decode("ascii"),
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "identity": self._seal(
+                {
+                    "student_name": student_name,
+                    "student_id": student_id,
+                    "machine_id": self.machine_id,
+                }
+            ),
         }
         # Appended, not truncated: the notebooks explicitly tell students
         # to re-run the launch-chat cell mid-session (e.g. after building
@@ -105,15 +124,22 @@ class SessionLogger:
         with self.log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(header) + "\n")
 
-    def _write_encrypted(self, record: dict) -> None:
-        plaintext = json.dumps(record, ensure_ascii=False).encode("utf-8")
+    def _seal(self, obj) -> dict:
+        """AES-GCM encrypts one JSON-serialisable object under this
+        session's key, in the same {nonce, ciphertext} shape every
+        encrypted part of this file uses. Shared by the header's identity
+        block and by each logged turn, so there is one encryption path to
+        get right rather than two."""
+        plaintext = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         nonce = os.urandom(12)
         ciphertext = self._aesgcm.encrypt(nonce, plaintext, None)
-        line = {
-            "type": "record",
+        return {
             "nonce": base64.b64encode(nonce).decode("ascii"),
             "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
         }
+
+    def _write_encrypted(self, record: dict) -> None:
+        line = {"type": "record", **self._seal(record)}
         with self.log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(line) + "\n")
 

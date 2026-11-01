@@ -9,6 +9,11 @@ Commit only the printed public key path to the repo. Keep the private key
 path off the repo entirely (e.g. outside the working directory), on
 whatever machine will grade submissions.
 
+The student's name and ID are encrypted inside the log as of 2026-11-01
+(Lab 2 students push their logs to public forks), so both decrypt
+commands below need --private-key to report who a file belongs to, not
+just to read its turns. Logs in the older plain-text format still work.
+
 Decrypt a student's uploaded log for grading:
     python -m agent_pipeline.grading_cli decrypt path/to/student_session.jsonl.enc \\
         --private-key /path/to/grading_private_key.pem
@@ -33,7 +38,7 @@ def _cmd_generate_keys(args):
 
 
 def _cmd_decrypt(args):
-    identity = read_student_identity(args.log_path)
+    identity = read_student_identity(args.log_path, args.private_key)
     student_name, student_id, track = identity["student_name"], identity["student_id"], identity["track"]
     if student_name or student_id:
         track_suffix = f" [{track}]" if track else ""
@@ -76,7 +81,7 @@ def _cmd_decrypt_batch(args):
     for enc_path in enc_files:
         entry = {"source_file": str(enc_path)}
         try:
-            identity = read_student_identity(enc_path)
+            identity = read_student_identity(enc_path, args.private_key)
         except Exception as exc:
             entry["status"] = f"error reading header: {exc}"
             manifest.append(entry)
